@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if edit else 'Create' }} Post - Portfolio Blog{% endblock %}
+
+{% block content %}
+<div class="form-container">
+  <h1>{{ 'Edit' if edit else 'Create' }} Blog Post</h1>
+
+  <form method="POST">
+    {{ form.hidden_tag() }}
+
+    <div class="form-group">
+      {{ form.title.label }}<br>
+      {{ form.title(class="input") }}
+    </div>
+
+    <div class="form-group">
+      {{ form.description.label }}<br>
+      {{ form.description(class="textarea") }}
+    </div>
+
+    <div class="form-group">
+      {{ form.github_link.label }}<br>
+      {{ form.github_link(class="input") }}
+    </div>
+
+    <div class="form-group">
+      {{ form.live_deploy_link.label }}<br>
+      {{ form.live_deploy_link(class="input") }}
+    </div>
+
+    <div class="form-group">
+      {{ form.photo.label }}<br>
+      {{ form.photo(class="input") }}
+    </div>
+
+    <div class="form-group">
+      {{ form.submit(class="btn") }}
+    </div>
+  </form>
+</div>
+{% endblock %}

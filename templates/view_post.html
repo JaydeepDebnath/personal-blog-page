@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}{{ post.title }} - Portfolio Blog{% endblock %}
+
+{% block content %}
+<article class="single-post">
+  <h1>{{ post.title }}</h1>
+
+  {% if post.photo_filename %}
+    <img src="{{ url_for('static', filename='uploads/' + post.photo_filename) }}" alt="{{ post.title }}" class="post-image">
+  {% endif %}
+
+  <p class="meta">Posted by {{ post.author.username }} on {{ post.creation_date.strftime('%b %d, %Y') }}</p>
+
+  <div class="description">
+    <p>{{ post.description }}</p>
+  </div>
+
+  <div class="links">
+    {% if post.github_link %}
+      <a href="{{ post.github_link }}" target="_blank" class="btn">GitHub</a>
+    {% endif %}
+    {% if post.live_deploy_link %}
+      <a href="{{ post.live_deploy_link }}" target="_blank" class="btn">Live Site</a>
+    {% endif %}
+  </div>
+
+  {% if current_user.is_authenticated and current_user.id == post.user_id %}
+    <div class="admin-controls">
+      <a href="{{ url_for('main.edit_post', post_id=post.id) }}" class="btn edit">Edit</a>
+      <form action="{{ url_for('main.delete_post', post_id=post.id) }}" method="POST" style="display:inline;">
+        <button type="submit" class="btn delete" onclick="return confirm('Are you sure you want to delete this post?');">Delete</button>
+      </form>
+    </div>
+  {% endif %}
+</article>
+{% endblock %}

@@ -1,0 +1,229 @@
+/* ---------- GLOBAL RESET ---------- */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f7f8fa;
+  color: #333;
+  line-height: 1.6;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- NAVBAR ---------- */
+nav {
+  background: #0d1117;
+  color: #fff;
+  padding: 1rem 2rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+nav .logo {
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+nav ul {
+  display: flex;
+  list-style: none;
+  gap: 1.2rem;
+}
+
+nav ul li a {
+  color: #fff;
+  text-decoration: none;
+  font-weight: 500;
+  transition: 0.2s;
+}
+
+nav ul li a:hover {
+  color: #58a6ff;
+}
+
+/* ---------- MAIN CONTAINER ---------- */
+.container {
+  flex: 1;
+  width: 90%;
+  max-width: 1000px;
+  margin: 2rem auto;
+}
+
+/* ---------- FLASH MESSAGES ---------- */
+.flash-messages {
+  max-width: 800px;
+  margin: 1rem auto;
+  text-align: center;
+}
+.flash {
+  padding: 0.8rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 0.6rem;
+  font-weight: 500;
+}
+.flash.success {
+  background: #d1e7dd;
+  color: #0a3622;
+  border: 1px solid #badbcc;
+}
+.flash.danger {
+  background: #f8d7da;
+  color: #842029;
+  border: 1px solid #f5c2c7;
+}
+
+/* ---------- BUTTONS ---------- */
+.btn {
+  background: #0077ff;
+  color: white;
+  padding: 0.6rem 1rem;
+  border-radius: 5px;
+  border: none;
+  text-decoration: none;
+  display: inline-block;
+  cursor: pointer;
+  transition: 0.2s ease-in-out;
+  font-size: 0.95rem;
+}
+.btn:hover {
+  background: #005fd4;
+}
+
+.btn.delete {
+  background: #e63946;
+}
+.btn.delete:hover {
+  background: #c52733;
+}
+
+.btn.edit {
+  background: #f9a825;
+  color: #222;
+}
+.btn.edit:hover {
+  background: #c78600;
+}
+
+/* ---------- AUTH FORMS ---------- */
+.auth-box, .form-container {
+  background: white;
+  max-width: 480px;
+  margin: 3rem auto;
+  padding: 2rem;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+}
+
+.auth-box h1, .form-container h1 {
+  text-align: center;
+  margin-bottom: 1.5rem;
+  color: #111;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.input, .textarea {
+  width: 100%;
+  padding: 0.7rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+  background: #fafafa;
+}
+
+.textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+/* ---------- BLOG POST CARDS ---------- */
+.post-card {
+  background: #fff;
+  padding: 1.2rem;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  margin-bottom: 1.5rem;
+  transition: 0.2s;
+}
+.post-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.post-card h2 {
+  font-size: 1.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.post-card p {
+  color: #555;
+  margin-bottom: 0.8rem;
+}
+
+.post-card .meta {
+  font-size: 0.85rem;
+  color: #777;
+}
+
+.post-card a {
+  color: #0077ff;
+  text-decoration: none;
+}
+.post-card a:hover {
+  text-decoration: underline;
+}
+
+/* ---------- DASHBOARD ---------- */
+.dashboard {
+  max-width: 900px;
+  margin: 2rem auto;
+}
+
+.dashboard h1 {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.dashboard .actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 1rem;
+}
+
+/* ---------- FOOTER ---------- */
+footer {
+  text-align: center;
+  padding: 1.5rem 0;
+  background: #0d1117;
+  color: #ccc;
+  margin-top: auto;
+  font-size: 0.9rem;
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 768px) {
+  nav ul {
+    gap: 0.8rem;
+  }
+
+  .container {
+    width: 94%;
+  }
+
+  .auth-box, .form-container {
+    margin: 2rem 1rem;
+    padding: 1.5rem;
+  }
+
+  .post-card {
+    padding: 1rem;
+  }
+}
