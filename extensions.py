@@ -5,4 +5,6 @@ from flask_login import LoginManager
 db = SQLAlchemy()
 migrate = Migrate()
 login_manager = LoginManager()
-login_manager.login_view = 'auth.login'
+
+# No need for a login_view redirect since React handles login UI
+login_manager.session_protection = "strong"
