@@ -1,24 +1,24 @@
 from flask import Blueprint, jsonify, request
-from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from extensions import db, login_manager
+from extensions import db
 from models import User, BlogPost
 from datetime import datetime
+from flask_jwt_extended import (
+    create_access_token,
+    jwt_required,
+    get_jwt_identity,
+    set_access_cookies,
+    unset_jwt_cookies
+)
 
 bp = Blueprint('api', __name__)
 
-# ----------------- Flask-Login user loader -----------------
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
 # ============================================================
-# 🔐 AUTH ROUTES (React + JSON)
+# 🔐 AUTH ROUTES
 # ============================================================
 
 @bp.route('/api/register', methods=['POST'])
 def api_register():
-    """Register a new user (POST only)."""
     data = request.get_json()
     if not data:
         return jsonify({"message": "Missing request data"}), 400
@@ -36,7 +36,8 @@ def api_register():
     new_user = User(
         username=username,
         email=email,
-        password=generate_password_hash(password)
+        password=generate_password_hash(password),
+        is_admin=data.get("is_admin", False)
     )
     db.session.add(new_user)
     db.session.commit()
@@ -46,7 +47,6 @@ def api_register():
 
 @bp.route('/api/login', methods=['POST'])
 def api_login():
-    """Login and return user info."""
     data = request.get_json()
     if not data:
         return jsonify({"message": "Missing credentials"}), 400
@@ -57,81 +57,62 @@ def api_login():
     user = User.query.filter_by(email=email).first()
     if not user or not check_password_hash(user.password, password):
         return jsonify({"message": "Invalid email or password"}), 401
-    
+
     if not user.is_admin:
         return jsonify({"message": "Access denied: Only admin can log in"}), 403
-    
-    if not user or not check_password_hash(user.password, password):
-        return jsonify({"message": "Invalid email or password"}), 401
 
-    login_user(user)
-    return jsonify({
+    access_token = create_access_token(identity=str(user.id))
+
+    response = jsonify({
         "message": "Login successful",
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email,
-            "is_admin": getattr(user, "is_admin", False)
-        }
-    }), 200
+        "token": access_token,
+        "user": user.to_dict()
+    })
+    set_access_cookies(response, access_token)
+    return response, 200
 
-@bp.route("/api/session", methods=["GET"])
-def get_session():
-    if not current_user.is_authenticated:
-        return jsonify({"message": "Session inactive"}), 401
-
-    return jsonify({
-        "id": current_user.id,
-        "username": current_user.username,
-        "email": current_user.email,
-        "is_admin": getattr(current_user, "is_admin", False)
-    }), 200
 
 @bp.route('/api/logout', methods=['POST'])
-@login_required
 def api_logout():
-    """Logout the current user."""
-    logout_user()
-    return jsonify({"message": "Logged out successfully"}), 200
+    response = jsonify({"message": "Logout successful"})
+    unset_jwt_cookies(response)
+    return response, 200
 
 
 @bp.route('/api/current_user', methods=['GET'])
-@login_required
+@jwt_required()
 def api_current_user():
-    """Fetch current logged-in user."""
-    return jsonify({
-        "id": current_user.id,
-        "username": current_user.username,
-        "email": current_user.email,
-        "is_admin": getattr(current_user, "is_admin", False)
-    }), 200
+    user_id = get_jwt_identity()
+    user = User.query.get(int(user_id))
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+    return jsonify(user.to_dict()), 200
+
 
 # ============================================================
-# 🧭 BLOG ROUTES (Public + Admin)
+# 🧭 PUBLIC BLOG ROUTES
 # ============================================================
 
 @bp.route('/api/posts', methods=['GET'])
 def api_get_posts():
-    """Public route to list all blog posts."""
     posts = BlogPost.query.order_by(BlogPost.creation_date.desc()).all()
-    result = []
-    for post in posts:
-        result.append({
-            "id": post.id,
-            "title": post.title,
-            "description": post.description,
-            "github_link": post.github_link,
-            "live_deploy_link": post.live_deploy_link,
-            "photo_filename": post.photo_filename,
-            "creation_date": post.creation_date.strftime("%Y-%m-%d"),
-            "last_updated": post.last_updated.strftime("%Y-%m-%d") if post.last_updated else None
-        })
-    return jsonify(result), 200
+    return jsonify([
+        {
+            "id": p.id,
+            "title": p.title,
+            "description": p.description,
+            "github_link": p.github_link,
+            "live_deploy_link": p.live_deploy_link,
+            "photo_filename": p.photo_filename,
+            "creation_date": p.creation_date.strftime("%Y-%m-%d"),
+            "last_updated": p.last_updated.strftime("%Y-%m-%d") if p.last_updated else None,
+            "author": p.author.username
+        } for p in posts
+    ]), 200
 
 
 @bp.route('/api/posts/<int:post_id>', methods=['GET'])
 def api_view_post(post_id):
-    """Public route to view a single post by ID."""
     post = BlogPost.query.get_or_404(post_id)
     return jsonify({
         "id": post.id,
@@ -141,38 +122,43 @@ def api_view_post(post_id):
         "live_deploy_link": post.live_deploy_link,
         "photo_filename": post.photo_filename,
         "creation_date": post.creation_date.strftime("%Y-%m-%d"),
-        "last_updated": post.last_updated.strftime("%Y-%m-%d") if post.last_updated else None
+        "last_updated": post.last_updated.strftime("%Y-%m-%d") if post.last_updated else None,
+        "author": post.author.username
     }), 200
 
 
 # ============================================================
-# 🧑‍💻 DASHBOARD (Admin-only CRUD)
+# 🧑‍💻 ADMIN DASHBOARD (JWT + ROLE CHECK)
 # ============================================================
 
 @bp.route('/api/dashboard', methods=['GET'])
-@login_required
+@jwt_required()
 def api_dashboard():
-    """Admin-only dashboard to list all posts."""
-    if not getattr(current_user, "is_admin", False):
+    user_id = get_jwt_identity()
+    user = User.query.get(int(user_id))
+    if not user or not user.is_admin:
         return jsonify({"message": "Access denied: Admins only"}), 403
 
     posts = BlogPost.query.order_by(BlogPost.creation_date.desc()).all()
-    return jsonify([{
-        "id": post.id,
-        "title": post.title,
-        "description": post.description,
-        "github_link": post.github_link,
-        "live_deploy_link": post.live_deploy_link,
-        "photo_filename": post.photo_filename,
-        "creation_date": post.creation_date.strftime("%Y-%m-%d")
-    } for post in posts]), 200
+    return jsonify([
+        {
+            "id": p.id,
+            "title": p.title,
+            "description": p.description,
+            "github_link": p.github_link,
+            "live_deploy_link": p.live_deploy_link,
+            "photo_filename": p.photo_filename,
+            "creation_date": p.creation_date.strftime("%Y-%m-%d")
+        } for p in posts
+    ]), 200
 
 
 @bp.route('/api/posts', methods=['POST'])
-@login_required
+@jwt_required()
 def api_create_post():
-    """Create a new blog post."""
-    if not getattr(current_user, "is_admin", False):
+    user_id = get_jwt_identity()
+    user = User.query.get(int(user_id))
+    if not user or not user.is_admin:
         return jsonify({"message": "Access denied: Admins only"}), 403
 
     data = request.get_json()
@@ -186,7 +172,7 @@ def api_create_post():
         github_link=data["github_link"],
         live_deploy_link=data["live_deploy_link"],
         photo_filename=data["photo_filename"],
-        user_id=current_user.id,
+        user_id=user.id,
         creation_date=datetime.utcnow(),
         last_updated=datetime.utcnow()
     )
@@ -196,10 +182,11 @@ def api_create_post():
 
 
 @bp.route('/api/posts/<int:post_id>', methods=['PUT'])
-@login_required
+@jwt_required()
 def api_edit_post(post_id):
-    """Update an existing post."""
-    if not getattr(current_user, "is_admin", False):
+    user_id = get_jwt_identity()
+    user = User.query.get(int(user_id))
+    if not user or not user.is_admin:
         return jsonify({"message": "Access denied: Admins only"}), 403
 
     post = BlogPost.query.get_or_404(post_id)
@@ -217,10 +204,11 @@ def api_edit_post(post_id):
 
 
 @bp.route('/api/posts/<int:post_id>', methods=['DELETE'])
-@login_required
+@jwt_required()
 def api_delete_post(post_id):
-    """Delete a post by ID."""
-    if not getattr(current_user, "is_admin", False):
+    user_id = get_jwt_identity()
+    user = User.query.get(int(user_id))
+    if not user or not user.is_admin:
         return jsonify({"message": "Access denied: Admins only"}), 403
 
     post = BlogPost.query.get_or_404(post_id)

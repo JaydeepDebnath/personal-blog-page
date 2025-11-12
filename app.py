@@ -1,6 +1,6 @@
 from flask import Flask, jsonify
 from config import Config
-from extensions import db, migrate, login_manager
+from extensions import db, migrate, jwt
 from flask_cors import CORS
 
 
@@ -11,10 +11,12 @@ def create_app():
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
-    login_manager.init_app(app)
+    jwt.init_app(app)
 
     # Enable CORS for React frontend
-    CORS(app, supports_credentials=True, origins=["http://localhost:3000","http://192.168.1.3:3000"])
+    CORS(app, 
+         supports_credentials=True,
+         origins=["http://localhost:3000","http://192.168.1.3:3000"])
 
     # Import models and API blueprint AFTER extensions
     from models import User, BlogPost
