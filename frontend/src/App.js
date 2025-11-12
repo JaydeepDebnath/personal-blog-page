@@ -1,37 +1,32 @@
 import React, { useState, useEffect, useCallback } from "react";
 import "./App.css";
-import {useNavigate} from "react-router-dom" ;
+
+const API_BASE = "http://127.0.0.1:8000/api";
 
 function App() {
   const [user, setUser] = useState(null);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState("blog"); 
-  const navigate = useNavigate()
+  const [view, setView] = useState("blog");
   const [selectedPost, setSelectedPost] = useState(null);
+
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     github_link: "",
     live_deploy_link: "",
-    photo_filename: "",
+    photo: null,
   });
 
-  // ---------------- Fetch Public Blog Posts ----------------
+  // ---------------- Fetch Public Posts ----------------
   const fetchPublicPosts = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch("http://127.0.0.1:8000/api/posts", { credentials: "include" });
-      const html = await res.text();
-
-      // Extract JSON-like content if Flask returns HTML
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
-      const cards = [...doc.querySelectorAll(".blog-card")];
-      if (cards.length > 0) {
-        // Custom structure extraction (optional)
+      const res = await fetch(`${API_BASE}/posts`);
+      if (res.ok) {
+        const data = await res.json();
+        setPosts(data);
       }
-
     } catch (err) {
       console.error("Error fetching posts:", err);
     } finally {
@@ -39,121 +34,167 @@ function App() {
     }
   }, []);
 
-  // ---------------- Auth Handlers ----------------
-  
+  // ---------------- Auth ----------------
   const checkSession = useCallback(async () => {
-  try {
-    const res = await fetch("http://127.0.0.1:8000/api/dashboard", {
-      credentials: "include",
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      setUser(true);
-      setPosts(data);
-      return true;
-    } else {
+    const token = localStorage.getItem("token");
+    if (!token) {
       setUser(null);
-      return false;
+      return;
     }
-  } catch (err) {
-    console.error("Session check failed:", err);
-    setUser(null);
-    return false;
-  }
-}, []);
 
-const handleLogin = async (email, password) => {
-  try {
-    const res = await fetch("http://127.0.0.1:8000/api/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ email, password }),
-    });
+    try {
+      const res = await fetch(`${API_BASE}/current_user`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
 
-    if (res.ok) {
-      const sessionRes = await fetch("http://localhost:8000/api/session",{
-        credentials:"include"
-      })
-      if (sessionRes.ok) {
-        navigate("/dashboard");
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data);
+        return true;
       } else {
-        alert("Session not active. Try logging in again.");
+        setUser(null);
       }
-    } else {
-      alert("Login failed. Check credentials.");
+    } catch (err) {
+      console.error("Session check failed:", err);
+      setUser(null);
     }
-  } catch (err) {
-    console.error("Login error:", err);
-    alert("An error occurred during login.");
-  }
-};
+  }, []);
 
-useEffect(() => {
-  fetchPublicPosts();
-  checkSession();
-}, [fetchPublicPosts, checkSession]);
+  const handleLogin = async (email, password) => {
+    try {
+      const res = await fetch(`${API_BASE}/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        // backend returns "token"
+        localStorage.setItem("token", data.token);
+        await checkSession();
+        setView("dashboard");
+      } else {
+        alert(data.message || "Login failed.");
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+    }
+  };
 
   const handleLogout = async () => {
-    await fetch("http://127.0.0.1:8000/api/logout", { credentials: "include" });
+    localStorage.removeItem("token");
     setUser(null);
     setView("blog");
+    try {
+      await fetch(`${API_BASE}/logout`, { method: "POST" });
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
   };
 
-  // ---------------- CRUD Operations ----------------
+  // ---------------- CREATE POST ----------------
   const handleCreatePost = async (e) => {
     e.preventDefault();
-    const res = await fetch("http://127.0.0.1:8000/api/create_post", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      credentials: "include",
-      body: new URLSearchParams(formData),
-    });
-    if (res.ok) {
-      alert("Post created!");
-      fetchPublicPosts();
-      setView("dashboard");
-    } else {
-      alert("Failed to create post.");
+    const token = localStorage.getItem("token");
+
+    const fd = new FormData();
+    fd.append("title", formData.title);
+    fd.append("description", formData.description);
+    fd.append("github_link", formData.github_link);
+    fd.append("live_deploy_link", formData.live_deploy_link);
+    if (formData.photo) fd.append("photo", formData.photo);
+
+    try {
+      const res = await fetch(`${API_BASE}/posts`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        alert(data.message);
+        fetchPublicPosts();
+        setView("dashboard");
+      } else {
+        alert(data.message || "Failed to create post.");
+      }
+    } catch (err) {
+      console.error("Error creating post:", err);
     }
   };
 
-  const handleEditPost = async (id) => {
-    const res = await fetch(`http://127.0.0.1:8000/api/edit_post/${id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      credentials: "include",
-      body: new URLSearchParams(formData),
-    });
-    if (res.ok) {
-      alert("Post updated!");
-      fetchPublicPosts();
-      setView("dashboard");
-    } else {
-      alert("Failed to update post.");
+  // ---------------- EDIT POST ----------------
+  const handleEditPost = async (e) => {
+    e.preventDefault();
+    const token = localStorage.getItem("token");
+
+    const fd = new FormData();
+    fd.append("title", formData.title);
+    fd.append("description", formData.description);
+    fd.append("github_link", formData.github_link);
+    fd.append("live_deploy_link", formData.live_deploy_link);
+    if (formData.photo) fd.append("photo", formData.photo);
+
+    try {
+      const res = await fetch(`${API_BASE}/posts/${selectedPost.id}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        alert(data.message);
+        fetchPublicPosts();
+        setView("dashboard");
+      } else {
+        alert(data.message || "Failed to update post.");
+      }
+    } catch (err) {
+      console.error("Error updating post:", err);
     }
   };
 
+  // ---------------- DELETE POST ----------------
   const handleDeletePost = async (id) => {
+    const token = localStorage.getItem("token");
     if (!window.confirm("Are you sure you want to delete this post?")) return;
-    const res = await fetch(`http://127.0.0.1:8000/api/delete_post/${id}`, {
-      method: "POST",
-      credentials: "include",
-    });
-    if (res.ok) {
-      alert("Post deleted!");
-      fetchPublicPosts();
-    } else {
-      alert("Failed to delete post.");
+
+    try {
+      const res = await fetch(`${API_BASE}/posts/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        alert(data.message);
+        fetchPublicPosts();
+      } else {
+        alert(data.message || "Failed to delete post.");
+      }
+    } catch (err) {
+      console.error("Delete error:", err);
     }
   };
 
-  // ---------------- Render Components ----------------
+  // ---------------- Hooks ----------------
+  useEffect(() => {
+    fetchPublicPosts();
+    checkSession();
+  }, [fetchPublicPosts, checkSession]);
 
+  // ---------------- Components ----------------
   const Login = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white">
         <div className="bg-gray-900 p-10 rounded-2xl shadow-2xl transform hover:scale-105 transition-all duration-500">
@@ -195,11 +236,13 @@ useEffect(() => {
               key={post.id}
               className="bg-gray-900 p-6 rounded-2xl shadow-lg transform hover:scale-105 hover:rotate-1 transition-transform duration-500"
             >
-              <img
-                src={post.photo_filename}
-                alt={post.title}
-                className="rounded-lg mb-4"
-              />
+              {post.photo_filename && (
+                <img
+                  src={`/static/uploads/${post.photo_filename}`}
+                  alt={post.title}
+                  className="rounded-lg mb-4"
+                />
+              )}
               <h2 className="text-2xl font-semibold">{post.title}</h2>
               <p className="text-gray-400 mt-2">{post.description}</p>
               <div className="flex justify-between mt-4">
@@ -255,7 +298,7 @@ useEffect(() => {
             description: "",
             github_link: "",
             live_deploy_link: "",
-            photo_filename: "",
+            photo: null,
           });
           setView("create");
         }}
@@ -263,7 +306,6 @@ useEffect(() => {
       >
         Create Post
       </button>
-
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {posts.map((post) => (
           <div
@@ -276,7 +318,13 @@ useEffect(() => {
               <button
                 onClick={() => {
                   setSelectedPost(post);
-                  setFormData(post);
+                  setFormData({
+                    title: post.title,
+                    description: post.description,
+                    github_link: post.github_link,
+                    live_deploy_link: post.live_deploy_link,
+                    photo: null,
+                  });
                   setView("edit");
                 }}
                 className="bg-blue-600 px-3 py-2 rounded hover:bg-blue-700"
@@ -299,13 +347,15 @@ useEffect(() => {
   const PostForm = ({ isEdit = false }) => (
     <div className="min-h-screen bg-black text-white p-10 flex justify-center">
       <form
-        onSubmit={(e) => (isEdit ? handleEditPost(selectedPost.id) : handleCreatePost(e))}
+        onSubmit={(e) => (isEdit ? handleEditPost(e) : handleCreatePost(e))}
         className="bg-gray-900 p-8 rounded-2xl shadow-2xl w-full max-w-lg"
+        encType="multipart/form-data"
       >
         <h1 className="text-2xl font-bold mb-6">
           {isEdit ? "Edit Post" : "Create Post"}
         </h1>
-        {["title", "description", "github_link", "live_deploy_link", "photo_filename"].map(
+
+        {["title", "description", "github_link", "live_deploy_link"].map(
           (field) => (
             <input
               key={field}
@@ -319,6 +369,14 @@ useEffect(() => {
             />
           )
         )}
+
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => setFormData({ ...formData, photo: e.target.files[0] })}
+          className="w-full mb-4 p-3 rounded bg-gray-800"
+        />
+
         <div className="flex justify-between mt-6">
           <button
             type="submit"
@@ -338,7 +396,7 @@ useEffect(() => {
     </div>
   );
 
-  // ---------------- Conditional Rendering ----------------
+  // ---------------- Conditional Render ----------------
   if (view === "login") return <Login />;
   if (view === "dashboard") return <Dashboard />;
   if (view === "create") return <PostForm />;

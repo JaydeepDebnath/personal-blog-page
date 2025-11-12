@@ -1,7 +1,9 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request,current_app
 from werkzeug.security import generate_password_hash, check_password_hash
 from extensions import db
+from werkzeug.utils import secure_filename
 from models import User, BlogPost
+import os
 from datetime import datetime
 from flask_jwt_extended import (
     create_access_token,
@@ -152,66 +154,130 @@ def api_dashboard():
         } for p in posts
     ]), 200
 
-
+# ---------- CREATE POST ----------
 @bp.route('/api/posts', methods=['POST'])
 @jwt_required()
 def api_create_post():
     user_id = get_jwt_identity()
     user = User.query.get(int(user_id))
-    if not user or not user.is_admin:
+
+    if not user:
+        return jsonify({"message": "User not found"}), 404
+
+    # Allow admin or logged-in user (if you want admin only → add "and not user.is_admin")
+    if not user.is_admin:
         return jsonify({"message": "Access denied: Admins only"}), 403
 
-    data = request.get_json()
-    required = ["title", "description", "github_link", "live_deploy_link", "photo_filename"]
-    if not all(key in data for key in required):
-        return jsonify({"message": "Missing required fields"}), 400
+    # Support both JSON and multipart form (file upload)
+    if request.content_type.startswith('multipart/form-data'):
+        title = request.form.get("title")
+        description = request.form.get("description")
+        github_link = request.form.get("github_link")
+        live_deploy_link = request.form.get("live_deploy_link")
+        photo = request.files.get("photo")
 
-    post = BlogPost(
-        title=data["title"],
-        description=data["description"],
-        github_link=data["github_link"],
-        live_deploy_link=data["live_deploy_link"],
-        photo_filename=data["photo_filename"],
-        user_id=user.id,
-        creation_date=datetime.utcnow(),
-        last_updated=datetime.utcnow()
-    )
+        filename = None
+        if photo:
+            filename = secure_filename(photo.filename)
+            upload_path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
+            photo.save(upload_path)
+
+        post = BlogPost(
+            title=title,
+            description=description,
+            github_link=github_link,
+            live_deploy_link=live_deploy_link,
+            photo_filename=filename,
+            user_id=user.id,
+            creation_date=datetime.utcnow(),
+            last_updated=datetime.utcnow(),
+        )
+
+    else:
+        data = request.get_json() or {}
+        required = ["title", "description", "github_link", "live_deploy_link"]
+        if not all(key in data for key in required):
+            return jsonify({"message": "Missing required fields"}), 400
+
+        post = BlogPost(
+            title=data["title"],
+            description=data["description"],
+            github_link=data["github_link"],
+            live_deploy_link=data["live_deploy_link"],
+            photo_filename=data.get("photo_filename"),
+            user_id=user.id,
+            creation_date=datetime.utcnow(),
+            last_updated=datetime.utcnow(),
+        )
+
     db.session.add(post)
     db.session.commit()
     return jsonify({"message": "Post created successfully"}), 201
 
 
+# ---------- EDIT POST ----------
 @bp.route('/api/posts/<int:post_id>', methods=['PUT'])
 @jwt_required()
 def api_edit_post(post_id):
     user_id = get_jwt_identity()
     user = User.query.get(int(user_id))
-    if not user or not user.is_admin:
-        return jsonify({"message": "Access denied: Admins only"}), 403
+    if not user:
+        return jsonify({"message": "User not found"}), 404
 
     post = BlogPost.query.get_or_404(post_id)
-    data = request.get_json()
 
-    post.title = data.get("title", post.title)
-    post.description = data.get("description", post.description)
-    post.github_link = data.get("github_link", post.github_link)
-    post.live_deploy_link = data.get("live_deploy_link", post.live_deploy_link)
-    post.photo_filename = data.get("photo_filename", post.photo_filename)
+    # Allow only the author OR admin
+    if post.user_id != user.id and not user.is_admin:
+        return jsonify({"message": "Access denied"}), 403
+
+    if request.content_type.startswith('multipart/form-data'):
+        title = request.form.get("title", post.title)
+        description = request.form.get("description", post.description)
+        github_link = request.form.get("github_link", post.github_link)
+        live_deploy_link = request.form.get("live_deploy_link", post.live_deploy_link)
+        photo = request.files.get("photo")
+
+        if photo:
+            filename = secure_filename(photo.filename)
+            upload_path = os.path.join(current_app.config["UPLOAD_FOLDER"], filename)
+            photo.save(upload_path)
+            post.photo_filename = filename
+
+        post.title = title
+        post.description = description
+        post.github_link = github_link
+        post.live_deploy_link = live_deploy_link
+
+    else:
+        data = request.get_json() or {}
+        post.title = data.get("title", post.title)
+        post.description = data.get("description", post.description)
+        post.github_link = data.get("github_link", post.github_link)
+        post.live_deploy_link = data.get("live_deploy_link", post.live_deploy_link)
+        post.photo_filename = data.get("photo_filename", post.photo_filename)
+
     post.last_updated = datetime.utcnow()
-
     db.session.commit()
+
     return jsonify({"message": "Post updated successfully"}), 200
 
 
+# ---------- DELETE POST ----------
 @bp.route('/api/posts/<int:post_id>', methods=['DELETE'])
 @jwt_required()
 def api_delete_post(post_id):
     user_id = get_jwt_identity()
     user = User.query.get(int(user_id))
-    if not user or not user.is_admin:
-        return jsonify({"message": "Access denied: Admins only"}), 403
+    if not user:
+        return jsonify({"message": "User not found"}), 404
 
     post = BlogPost.query.get_or_404(post_id)
+
+    # Only the author or admin can delete
+    if post.user_id != user.id and not user.is_admin:
+        return jsonify({"message": "Access denied"}), 403
+
     db.session.delete(post)
     db.session.commit()
     return jsonify({"message": "Post deleted successfully"}), 200
+
