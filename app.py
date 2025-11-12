@@ -14,7 +14,7 @@ def create_app():
     login_manager.init_app(app)
 
     # Enable CORS for React frontend
-    CORS(app, supports_credentials=True, origins=["http://localhost:3000","http://127.0.0.1:3000"])
+    CORS(app, supports_credentials=True, origins=["http://localhost:3000","http://192.168.1.3:3000"])
 
     # Import models and API blueprint AFTER extensions
     from models import User, BlogPost

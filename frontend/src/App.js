@@ -32,9 +32,6 @@ function App() {
         // Custom structure extraction (optional)
       }
 
-      // If you have a JSON endpoint for /blog, replace above with:
-      // const data = await res.json();
-      // setPosts(data);
     } catch (err) {
       console.error("Error fetching posts:", err);
     } finally {
